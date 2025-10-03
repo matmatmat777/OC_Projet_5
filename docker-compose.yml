@@ -1,0 +1,25 @@
+version: "3.9"
+
+services:
+  # Service MongoDB
+  mongo:
+    image: mongo:latest
+    container_name: mon_mongo_projet_5
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo_data:/data/db  # Volume pour persister les données Mongo
+
+  # Service Python (ton script)
+  python_app:
+    build: .   # Utilise le Dockerfile de Projet_5/
+    container_name: python_projet_5
+    depends_on:
+      - mongo  # Attendre que MongoDB démarre
+    volumes:
+      - ./archive:/app/archive  # Monte ton dossier CSV dans le conteneur
+    environment:
+      - MONGO_URI=mongodb://mongo:27017/  # Connexion via le nom du service Docker
+
+volumes:
+  mongo_data:
