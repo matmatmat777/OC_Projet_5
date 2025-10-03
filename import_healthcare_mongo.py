@@ -1,17 +1,11 @@
-# import_healthcare_mongo.py
-"""
-Script pour transformer un CSV de patients en documents MongoDB,
-avec vérification automatique des données et import direct dans MongoDB.
-"""
-
 import pandas as pd
 from bson import ObjectId
 from pymongo import MongoClient
+import os
+import time
+from pymongo.errors import ServerSelectionTimeoutError, BulkWriteError
 
-# -----------------------
-# 1️⃣ Lecture du CSV
-# -----------------------
-#csv_path = r"C:\Users\matde\Documents\OpenClassrooms\Projet_5\archive\healthcare_dataset.csv"
+# --- Lecture CSV ---
 csv_path = "/app/archive/healthcare_dataset.csv"
 data = pd.read_csv(csv_path, low_memory=False)
 
@@ -21,18 +15,13 @@ print("\nNombre de valeurs manquantes par colonne :")
 print(data.isnull().sum())
 print("\nNombre de doublons exacts :", data.duplicated().sum())
 
-# -----------------------
-# 2️⃣ Nettoyage des données
-# -----------------------
+# --- Nettoyage ---
 data_clean = data.drop_duplicates()
 
-# Colonnes pour identifier un patient unique
 group_cols = ['Name', 'Age', 'Gender', 'Blood Type']
 admission_cols = [col for col in data_clean.columns if col not in group_cols]
 
-# -----------------------
-# 3️⃣ Vérifier les patients avec plusieurs admissions
-# -----------------------
+# --- Patients avec multiples admissions ---
 multi_admissions = data_clean.groupby(group_cols).size()
 multi_admissions = multi_admissions[multi_admissions > 1]
 
@@ -41,22 +30,18 @@ if len(multi_admissions) > 0:
     print("Exemple de patient avec plusieurs admissions :")
     print(multi_admissions.head(1))
 
-# -----------------------
-# 4️⃣ Regrouper les admissions par patient
-# -----------------------
+# --- Regrouper les admissions par patient ---
 grouped = data_clean.groupby(group_cols).apply(
     lambda x: x[admission_cols].to_dict(orient='records')
 ).reset_index()
 
 grouped.columns = group_cols + ['Admissions']
 
-# -----------------------
-# 5️⃣ Créer les documents MongoDB
-# -----------------------
+# --- Créer les documents MongoDB ---
 mongo_docs = []
 for _, row in grouped.iterrows():
     mongo_docs.append({
-        "_id": str(ObjectId()),  # Génère un ObjectId valide MongoDB
+        "_id": str(ObjectId()),
         "Name": row['Name'],
         "Age": row['Age'],
         "Gender": row['Gender'],
@@ -64,29 +49,42 @@ for _, row in grouped.iterrows():
         "Admissions": row['Admissions']
     })
 
-# -----------------------
-# 6️⃣ Connexion à MongoDB
-# -----------------------
-client = MongoClient("mongodb://mongo:27017/")      # MongoDB local - nom du service docker à la place de localhost
-db = client["healthcare_db"]                        # Nom de la base
-collection = db["patients"]                         # Nom de la collection
+# --- Connexion MongoDB ---
+mongo_uri = os.environ.get("MONGO_URI")
+if not mongo_uri:
+    raise Exception("Variable d'environnement MONGO_URI non définie.")
 
-# -----------------------
-# 7️⃣ Nettoyer la collection existante (optionnel)
-# -----------------------
-collection.delete_many({})  # Supprime tous les documents existants
-print("\nCollection 'patients' nettoyée.")
+client = MongoClient(mongo_uri, serverSelectionTimeoutMS=5000)
 
-# -----------------------
-# 8️⃣ Import direct dans MongoDB
-# -----------------------
-collection.insert_many(mongo_docs)
-print(f"{len(mongo_docs)} documents insérés dans MongoDB avec succès !")
+# Attendre que MongoDB soit prêt
+for i in range(20):  # retry jusqu'à 20 fois
+    try:
+        client.admin.command('ping')
+        print("MongoDB connecté !")
+        break
+    except ServerSelectionTimeoutError:
+        print("MongoDB non prêt, retry dans 3s...")
+        time.sleep(3)
+else:
+    raise Exception("Impossible de se connecter à MongoDB")
 
-# -----------------------
-# 9️⃣ Vérification simple
-# -----------------------
-# Patients avec plusieurs admissions
+db_name = os.environ.get("MONGO_DB", "healthcare_db")
+db = client[db_name]
+collection = db["patients"]
+
+# --- Nettoyer la collection existante (optionnel) ---
+# Uncomment si tu veux réinitialiser la collection à chaque exécution
+# collection.delete_many({})
+
+# --- Import direct ---
+try:
+    collection.insert_many(mongo_docs, ordered=False)
+    print(f"{len(mongo_docs)} documents insérés dans MongoDB avec succès !")
+except BulkWriteError as bwe:
+    print("Erreur lors de l'insertion :")
+    print(bwe.details)
+
+# --- Vérification simple ---
 pipeline = [
     {"$project": {"Name": 1, "NumAdmissions": {"$size": "$Admissions"}}},
     {"$match": {"NumAdmissions": {"$gt": 1}}}
