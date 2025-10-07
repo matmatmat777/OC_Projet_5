@@ -1,17 +1,16 @@
-version: "3.9"
-
 services:
   mongo:
-    image: mongo:latest
+    image: mongo:8
     container_name: mon_mongo_projet_5
     environment:
-      - MONGO_INITDB_ROOT_USERNAME=${MONGO_INITDB_ROOT_USERNAME}
-      - MONGO_INITDB_ROOT_PASSWORD=${MONGO_INITDB_ROOT_PASSWORD}
-      - MONGO_INITDB_DATABASE=${MONGO_INITDB_DATABASE}
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_INITDB_ROOT_USERNAME}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_INITDB_ROOT_PASSWORD}
+      MONGO_INITDB_DATABASE: ${MONGO_INITDB_DATABASE}
     ports:
       - "27017:27017"
     volumes:
       - mongo_data:/data/db
+      - ./mongo-init:/docker-entrypoint-initdb.d:ro
 
   python_app:
     build: .
@@ -21,7 +20,7 @@ services:
     volumes:
       - ./archive:/app/archive
     environment:
-      - MONGO_URI=${MONGO_URI}
+      MONGO_URI: ${MONGO_URI}
     command: python import_healthcare_mongo.py
 
 volumes:

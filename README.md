@@ -101,7 +101,53 @@ Le script affiche:
 - Le nombre de patients avec plusieurs admissions
 
 
-## *6 Structure des fichiers*
+## *6 Authentification*
+
+Pour sécuriser l’accès à la base, un utilisateur spécifique est créé :
+
+### Variables d'environnement
+Dans le fichier `.env` :  
+MONGO_INITDB_ROOT_USERNAME=root
+MONGO_INITDB_ROOT_PASSWORD=example
+MONGO_INITDB_DATABASE=healthcare_db
+
+APP_MONGO_USER=app_user
+APP_MONGO_PASSWORD=app_pwd_secure
+
+MONGO_URI=mongodb://app_user:app_pwd_secure@mon_mongo_projet_5:27017/healthcare_db?authSource=healthcare_db
+
+
+### Script d’init MongoDB
+Dans `mongo-init/01-create-app-user.js` :  
+```js
+db = db.getSiblingDB("healthcare_db");
+db.createUser({
+  user: "app_user",
+  pwd: "app_pwd_secure",
+  roles: [{ role: "readWrite", db: "healthcare_db" }]
+});
+```
+⚠️ Ce script ne s’exécute que si le volume MongoDB est vide. Si vous changez le mot de passe ou l’utilisateur, supprimez le volume MongoDB avec docker-compose down -v.
+
+Vérification de l’utilisateur:
+
+docker exec -it mon_mongo_projet_5 mongosh -u root -p example
+> use healthcare_db
+> show users
+Vous devriez voir :
+
+```json
+{
+  "_id": "healthcare_db.app_user",
+  "user": "app_user",
+  "roles": [ { "role": "readWrite", "db": "healthcare_db" } ]
+}
+```
+Connexion depuis Python
+Le script import_healthcare_mongo.py utilise la variable MONGO_URI pour se connecter à MongoDB avec l’utilisateur app_user. 
+
+
+*7 Structure des fichiers*
 
 Projet_5/  
 |  
@@ -112,5 +158,8 @@ Projet_5/
 |-import_healthcare_mongo.py  
 |-requirements.txt  
 |-README.md  
+|
+|- mongo-init/
+      |-01-create-app-user.js
 
 

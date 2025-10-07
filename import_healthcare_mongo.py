@@ -94,3 +94,7 @@ patients_multi = list(collection.aggregate(pipeline))
 print(f"\nNombre de patients avec plusieurs admissions dans MongoDB : {len(patients_multi)}")
 if patients_multi:
     print("Exemple :", patients_multi[0])
+
+#--- Vérification de l'utilisateur connecté ---
+db_user = client.admin.command("connectionStatus")["authInfo"]["authenticatedUsers"]
+print("Utilisateur authentifié :", db_user)
